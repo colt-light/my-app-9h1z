@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pantry Watch — Expiry Tracker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥫</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   Pantry Watch — design tokens
+   ========================================================= */
+:root {
+  /* Base palette — sage/pantry, not the generic cream+terracotta pairing */
+  --bg: #F3F6F0;
+  --surface: #FFFFFF;
+  --surface-sunken: #EAF0E4;
+  --ink: #1E2A1E;
+  --ink-muted: #5C6B5A;
+  --ink-faint: #8B9A87;
+  --line: #DCE5D6;
+
+  /* Brand */
+  --brand: #2F5233;
+  --brand-dark: #203A24;
+  --brand-tint: #E4EEE0;
+
+  /* Status colors */
+  --fresh: #3E8E4F;
+  --fresh-bg: #E5F3E7;
+  --soon: #D98E1E;
+  --soon-bg: #FBF0DC;
+  --urgent: #D9622B;
+  --urgent-bg: #FBE8DD;
+  --expired: #B4392F;
+  --expired-bg: #F8E1DE;
+
+  --radius-s: 8px;
+  --radius-m: 14px;
+  --radius-l: 20px;
+  --shadow: 0 1px 2px rgba(30,42,30,0.06), 0 8px 24px -12px rgba(30,42,30,0.18);
+
+  --font-head: 'Outfit', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #142014;
+    --surface: #1C2A1C;
+    --surface-sunken: #223122;
+    --ink: #EAF1E6;
+    --ink-muted: #A8B8A4;
+    --ink-faint: #728069;
+    --line: #2C3C2A;
+    --brand: #7FBF8A;
+    --brand-dark: #9ED4A6;
+    --brand-tint: #223122;
+    --fresh: #6FCB80;
+    --fresh-bg: #1F3323;
+    --soon: #F0B24C;
+    --soon-bg: #3A2E17;
+    --urgent: #F08857;
+    --urgent-bg: #3C2618;
+    --expired: #F08076;
+    --expired-bg: #3C1E1B;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #142014; --surface: #1C2A1C; --surface-sunken: #223122;
+  --ink: #EAF1E6; --ink-muted: #A8B8A4; --ink-faint: #728069; --line: #2C3C2A;
+  --brand: #7FBF8A; --brand-dark: #9ED4A6; --brand-tint: #223122;
+  --fresh: #6FCB80; --fresh-bg: #1F3323; --soon: #F0B24C; --soon-bg: #3A2E17;
+  --urgent: #F08857; --urgent-bg: #3C2618; --expired: #F08076; --expired-bg: #3C1E1B;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+h1, h2, h3 { font-family: var(--font-head); margin: 0; color: var(--ink); }
+button { font-family: inherit; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* =========================================================
+   App shell
+   ========================================================= */
+.app { max-width: 880px; margin: 0 auto; min-height: 100%; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; position: sticky; top: env(safe-area-inset-top, 0px);
+  background: var(--bg); z-index: 20;
+}
+.topbar__brand { display: flex; align-items: center; gap: 8px; }
+.topbar__mark { font-size: 22px; }
+.topbar__name { font-family: var(--font-head); font-weight: 700; font-size: 19px; letter-spacing: -0.01em; }
+
+.topnav { display: none; gap: 4px; background: var(--surface); padding: 4px; border-radius: 999px; box-shadow: var(--shadow); }
+.topnav__item {
+  border: none; background: transparent; padding: 9px 16px; border-radius: 999px;
+  font-size: 14px; font-weight: 600; color: var(--ink-muted); cursor: pointer;
+  position: relative;
+}
+.topnav__item.is-active { background: var(--brand); color: #fff; }
+
+.badge-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--urgent); margin-left: 5px; vertical-align: middle;
+}
+.badge-dot[hidden] { display: none; }
+.badge-dot:not([hidden]) { display: inline-block; }
+
+.views { padding: 4px 20px 100px; }
+.view__header { padding: 6px 2px 18px; }
+.view__header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.view__sub { color: var(--ink-muted); margin: 4px 0 0; font-size: 14.5px; }
+
+/* =========================================================
+   Bottom nav (mobile)
+   ========================================================= */
+.bottomnav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex; justify-content: space-around; align-items: flex-end;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -4px 20px rgba(30,42,30,0.08);
+}
+.bottomnav__item {
+  border: none; background: none; display: flex; flex-direction: column; align-items: center;
+  gap: 3px; color: var(--ink-faint); font-size: 11px; font-weight: 600; padding: 4px 10px;
+  cursor: pointer; flex: 1; position: relative;
+}
+.bottomnav__item.is-active { color: var(--brand); }
+.bottomnav__item--add { color: var(--brand); margin-top: -18px; }
+.bottomnav__item--add span:last-child { margin-top: 2px; }
+.bottomnav__item .badge-dot { position: absolute; top: -1px; right: 22%; margin: 0; }
+
+/* =========================================================
+   Stat row (dashboard)
+   ========================================================= */
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 22px; }
+.stat-card {
+  background: var(--surface); border-radius: var(--radius-m); padding: 14px 14px 12px;
+  box-shadow: var(--shadow);
+}
+.stat-card__num { font-family: var(--font-head); font-size: 26px; font-weight: 700; line-height: 1; }
+.stat-card__label { font-size: 12.5px; color: var(--ink-muted); margin-top: 6px; font-weight: 500; }
+.stat-card--fresh .stat-card__num { color: var(--fresh); }
+.stat-card--soon .stat-card__num { color: var(--soon); }
+.stat-card--expired .stat-card__num { color: var(--expired); }
+
+/* =========================================================
+   Panels
+   ========================================================= */
+.panel { margin-bottom: 26px; }
+.panel__head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.panel__head h2 { font-size: 16.5px; font-weight: 700; }
+.panel__count {
+  font-size: 12.5px; font-weight: 700; color: var(--ink-faint);
+  background: var(--surface-sunken); padding: 2px 9px; border-radius: 999px;
+}
+.empty-note { color: var(--ink-faint); font-size: 13.5px; padding: 14px 2px; margin: 0; }
+
+/* =========================================================
+   Waste grid
+   ========================================================= */
+.waste-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.waste-card {
+  background: var(--surface); border-radius: var(--radius-m); padding: 14px;
+  box-shadow: var(--shadow);
+}
+.waste-card__num { font-family: var(--font-head); font-size: 22px; font-weight: 700; }
+.waste-card__label { font-size: 12px; color: var(--ink-muted); margin-top: 4px; }
+.waste-bar-wrap { grid-column: 1 / -1; background: var(--surface); border-radius: var(--radius-m); padding: 16px; box-shadow: var(--shadow); }
+.waste-bar-top { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.waste-bar-top strong { font-family: var(--font-head); font-size: 20px; color: var(--brand); }
+.waste-bar { height: 10px; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+.waste-bar__fill { height: 100%; background: linear-gradient(90deg, var(--brand), var(--fresh)); border-radius: 999px; transition: width .4s ease; }
+
+/* =========================================================
+   Product list & cards
+   ========================================================= */
+.product-list { display: flex; flex-direction: column; gap: 8px; }
+.product-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border-radius: var(--radius-m);
+  padding: 10px 12px; box-shadow: var(--shadow);
+  border-left: 4px solid var(--line);
+}
+.product-card--fresh { border-left-color: var(--fresh); }
+.product-card--soon { border-left-color: var(--soon); }
+.product-card--urgent { border-left-color: var(--urgent); }
+.product-card--expired { border-left-color: var(--expired); }
+
+.product-card__thumb {
+  width: 46px; height: 46px; border-radius: 10px; background: var(--surface-sunken);
+  display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;
+  overflow: hidden;
+}
+.product-card__thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+.product-card__body { flex: 1; min-width: 0; }
+.product-card__name { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.product-card__meta { font-size: 12.5px; color: var(--ink-muted); margin-top: 2px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.dot-sep::before { content: "·"; margin-right: 6px; color: var(--ink-faint); }
+
+.status-pill {
+  font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+}
+.status-pill--fresh { background: var(--fresh-bg); color: var(--fresh); }
+.status-pill--soon { background: var(--soon-bg); color: var(--soon); }
+.status-pill--urgent { background: var(--urgent-bg); color: var(--urgent); }
+.status-pill--expired { background: var(--expired-bg); color: var(--expired); }
+
+.product-card__days { font-size: 12px; font-weight: 700; color: var(--ink-muted); min-width: 64px; text-align: right; flex-shrink: 0; }
+
+.product-card__menu { position: relative; flex-shrink: 0; }
+.icon-btn {
+  border: none; background: var(--surface-sunken); width: 32px; height: 32px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-muted);
+}
+.menu-pop {
+  position: absolute; right: 0; top: 38px; background: var(--surface); border-radius: var(--radius-s);
+  box-shadow: var(--shadow); border: 1px solid var(--line); overflow: hidden; z-index: 15; min-width: 150px;
+}
+.menu-pop button {
+  display: block; width: 100%; text-align: left; padding: 10px 14px; border: none; background: none;
+  font-size: 13.5px; color: var(--ink); cursor: pointer;
+}
+.menu-pop button:hover { background: var(--surface-sunken); }
+.menu-pop button.danger { color: var(--expired); }
+
+/* History rows (read-only, dimmed) */
+.product-card--history { opacity: 0.75; }
+.outcome-tag { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--surface-sunken); color: var(--ink-muted); }
+
+/* =========================================================
+   Controls (search/filter/sort)
+   ========================================================= */
+.controls { margin-bottom: 16px; }
+.search-field {
+  display: flex; align-items: center; gap: 8px; background: var(--surface);
+  border-radius: var(--radius-m); padding: 11px 14px; box-shadow: var(--shadow); margin-bottom: 10px;
+  color: var(--ink-faint);
+}
+.search-field input {
+  border: none; outline: none; background: none; font-size: 14.5px; color: var(--ink); width: 100%; font-family: inherit;
+}
+.controls__row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.controls__row select {
+  border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius-s);
+  padding: 9px 10px; font-size: 13px; color: var(--ink); font-family: inherit; flex-shrink: 0;
+}
+
+/* =========================================================
+   Add product form
+   ========================================================= */
+.capture-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.capture-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--brand-tint); color: var(--brand-dark); border: 1px dashed var(--brand);
+  border-radius: var(--radius-m); padding: 13px 10px; font-weight: 600; font-size: 13.5px;
+  cursor: pointer; text-align: center;
+}
+.photo-preview { position: relative; width: 96px; margin-bottom: 16px; }
+.photo-preview img { width: 96px; height: 96px; object-fit: cover; border-radius: var(--radius-m); box-shadow: var(--shadow); }
+.chip-remove {
+  position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid var(--surface); background: var(--expired); color: #fff; font-size: 11px; cursor: pointer;
+}
+
+.form { display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.field em { font-style: normal; font-weight: 500; color: var(--ink-faint); font-size: 12px; }
+.field input, .field select, .field textarea {
+  border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius-s);
+  padding: 12px 13px; font-size: 15px; color: var(--ink); font-family: inherit; width: 100%;
+}
+.field textarea { resize: vertical; font-family: inherit; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--brand); }
+.field-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 480px) {
+  .field-grid { grid-template-columns: 1fr 1fr; }
+}
+.field input[type="date"] { min-width: 0; }
+.field__error { color: var(--expired); font-size: 12px; font-weight: 600; min-height: 14px; }
+.field.has-error input, .field.has-error select { border-color: var(--expired); }
+
+.form__actions { display: flex; gap: 10px; margin-top: 6px; }
+.btn {
+  border: none; border-radius: 999px; padding: 14px 22px; font-weight: 700; font-size: 14.5px;
+  cursor: pointer; font-family: inherit;
+}
+.btn--primary { background: var(--brand); color: #fff; flex: 1; }
+.btn--primary:active { background: var(--brand-dark); }
+.btn--ghost { background: var(--surface-sunken); color: var(--ink-muted); }
+
+/* =========================================================
+   Notifications view
+   ========================================================= */
+.notif-permission {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  background: var(--brand-tint); border-radius: var(--radius-m); padding: 16px; margin-bottom: 22px;
+}
+.notif-permission strong { display: block; font-size: 14.5px; margin-bottom: 3px; }
+.notif-permission p { margin: 0; font-size: 12.5px; color: var(--ink-muted); }
+.notif-permission .btn { padding: 10px 18px; font-size: 13px; flex-shrink: 0; }
+
+/* =========================================================
+   Modal (barcode scan)
+   ========================================================= */
+.modal {
+  position: fixed; inset: 0; background: rgba(20,32,20,0.55); z-index: 50;
+  align-items: center; justify-content: center; padding: 20px;
+}
+.modal[hidden] { display: none; }
+.modal:not([hidden]) { display: flex; }
+.modal__card { background: var(--surface); border-radius: var(--radius-l); padding: 18px; width: 100%; max-width: 420px; box-shadow: var(--shadow); }
+.modal__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.modal__close { border: none; background: var(--surface-sunken); width: 30px; height: 30px; border-radius: 50%; cursor: pointer; }
+.scan-video-wrap { position: relative; border-radius: var(--radius-m); overflow: hidden; background: #000; aspect-ratio: 4/3; }
+.scan-video-wrap video { width: 100%; height: 100%; object-fit: cover; }
+.scan-reticle {
+  position: absolute; inset: 22% 12%; border: 2.5px solid #fff; border-radius: 10px; opacity: 0.85;
+  box-shadow: 0 0 0 999px rgba(0,0,0,0.28);
+}
+.scan-status { text-align: center; font-size: 13px; color: var(--ink-muted); margin: 12px 0 2px; }
+
+/* =========================================================
+   Toast
+   ========================================================= */
+.toast {
+  position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); padding: 11px 20px; border-radius: 999px;
+  font-size: 13.5px; font-weight: 600; z-index: 60; box-shadow: var(--shadow);
+  animation: toast-in .25s ease;
+}
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* =========================================================
+   Responsive: tablet / desktop
+   ========================================================= */
+@media (min-width: 760px) {
+  .bottomnav { display: none; }
+  .topnav { display: flex; }
+  .views { padding: 4px 28px 60px; }
+  .field-grid { grid-template-columns: 1fr 1fr; }
+  .stat-row { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 759px) {
+  .topnav { display: none; }
+}
+
+</style>
+</head>
+<body>
+
+<!-- ===== App shell ===== -->
+<div class="app">
+
+  <!-- Top bar (desktop + mobile) -->
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="topbar__mark" aria-hidden="true">🥫</span>
+      <span class="topbar__name">Pantry Watch</span>
+    </div>
+    <nav class="topnav" aria-label="Primary">
+      <button class="topnav__item is-active" data-view="home">Home</button>
+      <button class="topnav__item" data-view="products">My Products</button>
+      <button class="topnav__item" data-view="add">Add Product</button>
+      <button class="topnav__item" data-view="notifications">Notifications
+        <span class="badge-dot" id="topnavNotifDot" hidden=""></span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- ===== Main content ===== -->
+  <main class="views">
+
+    <!-- ---------- HOME / DASHBOARD ---------- -->
+    <section class="view" id="view-home" data-view-panel="home">
+      <div class="view__header">
+        <h1>Good to see you</h1>
+        <p class="view__sub" id="homeSummaryLine">Here's what needs your attention.</p>
+      </div>
+
+      <div class="stat-row" id="statRow"></div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <h2>Urgent &amp; expiring soon</h2>
+          <span class="panel__count" id="expiringCount">0</span>
+        </div>
+        <div class="product-list" id="homeExpiringList"></div>
+        <p class="empty-note" id="homeExpiringEmpty" hidden="">Nothing urgent right now — nicely done.</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <h2>Recently added</h2>
+          <span class="panel__count" id="recentCount">0</span>
+        </div>
+        <div class="product-list" id="homeRecentList"></div>
+        <p class="empty-note" id="homeRecentEmpty" hidden="">Nothing added yet. Add your first product.</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <h2>Expired</h2>
+          <span class="panel__count" id="expiredCount">0</span>
+        </div>
+        <div class="product-list" id="homeExpiredList"></div>
+        <p class="empty-note" id="homeExpiredEmpty" hidden="">No expired products sitting around. Good work.</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <h2>Waste tracking</h2>
+        </div>
+        <div class="waste-grid" id="wasteGrid"></div>
+      </div>
+    </section>
+
+    <!-- ---------- MY PRODUCTS ---------- -->
+    <section class="view" id="view-products" data-view-panel="products" hidden="">
+      <div class="view__header">
+        <h1>My Products</h1>
+        <p class="view__sub">Everything you currently have, earliest expiry first.</p>
+      </div>
+
+      <div class="controls">
+        <div class="search-field">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M21 20.3 16.6 16a7.7 7.7 0 1 0-1.4 1.4L19.6 22Zm-13-3.3a5.7 5.7 0 1 1 0-11.4 5.7 5.7 0 0 1 0 11.4Z"></path></svg>
+          <input type="search" id="searchInput" placeholder="Search products…" aria-label="Search products">
+        </div>
+        <div class="controls__row">
+          <select id="filterCategory" aria-label="Filter by category">
+            <option value="all">All categories</option>
+          </select>
+          <select id="filterStatus" aria-label="Filter by status">
+            <option value="all">All statuses</option>
+            <option value="fresh">Fresh</option>
+            <option value="soon">Expiring Soon</option>
+            <option value="urgent">Urgent</option>
+            <option value="expired">Expired</option>
+          </select>
+          <select id="sortOrder" aria-label="Sort order">
+            <option value="expiry-asc">Expiry: earliest first</option>
+            <option value="expiry-desc">Expiry: latest first</option>
+            <option value="added-desc">Recently added</option>
+            <option value="name-asc">Name: A–Z</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="product-list" id="productsList"></div>
+      <p class="empty-note" id="productsEmpty" hidden="">No products match. Try a different search or filter.</p>
+
+      <div class="panel" style="margin-top:28px;">
+        <div class="panel__head">
+          <h2>History</h2>
+          <span class="panel__count" id="historyCount">0</span>
+        </div>
+        <p class="view__sub" style="margin:-4px 0 14px;">Products you've used, discarded, or let expire.</p>
+        <div class="product-list" id="historyList"></div>
+        <p class="empty-note" id="historyEmpty" hidden="">No history yet.</p>
+      </div>
+    </section>
+
+    <!-- ---------- ADD PRODUCT ---------- -->
+    <section class="view" id="view-add" data-view-panel="add" hidden="">
+      <div class="view__header">
+        <h1 id="addFormTitle">Add a Product</h1>
+        <p class="view__sub">A few details now save you food and money later.</p>
+      </div>
+
+      <div class="capture-row">
+        <button class="capture-btn" type="button" id="scanBarcodeBtn">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M3 3h2v18H3V3Zm4 0h1v18H7V3Zm3 0h2v18h-2V3Zm4 0h1v18h-1V3Zm3 0h2v18h-2V3Zm4 0h1v18h-1V3Z"></path></svg>
+          Scan barcode
+        </button>
+        <label class="capture-btn" for="photoInput">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M9 3 7.5 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.5L15 3H9Zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>
+          Take / choose photo
+        </label>
+        <input type="file" accept="image/*" capture="environment" id="photoInput" hidden="">
+      </div>
+      <div class="photo-preview" id="photoPreviewWrap" hidden="">
+        <img id="photoPreview" alt="Selected product photo">
+        <button type="button" class="chip-remove" id="removePhotoBtn" aria-label="Remove photo">✕</button>
+      </div>
+
+      <form id="productForm" class="form" novalidate="">
+        <input type="hidden" id="editId" value="">
+
+        <label class="field">
+          <span>Product name <em>*</em></span>
+          <input type="text" id="fieldName" required="" placeholder="e.g. Whole milk">
+          <span class="field__error" id="err-name"></span>
+        </label>
+
+        <div class="field-grid">
+          <label class="field">
+            <span>Category <em>*</em></span>
+            <select id="fieldCategory" required="">
+              <option value="Food">Food</option>
+              <option value="Drinks">Drinks</option>
+              <option value="Skincare">Skincare</option>
+              <option value="Household">Household</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Quantity <em>*</em></span>
+            <input type="number" id="fieldQuantity" required="" min="1" step="1" value="1">
+            <span class="field__error" id="err-quantity"></span>
+          </label>
+        </div>
+
+        <div class="field-grid">
+          <label class="field">
+            <span>Purchase date <em>*</em></span>
+            <input type="date" id="fieldPurchaseDate" required="">
+            <span class="field__error" id="err-purchase"></span>
+          </label>
+
+          <label class="field">
+            <span>Expiry date <em>*</em></span>
+            <input type="date" id="fieldExpiryDate" required="">
+            <span class="field__error" id="err-expiry"></span>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Notes <em>optional</em></span>
+          <textarea id="fieldNotes" rows="3" placeholder="Anything worth remembering — opened, half-used, brand, batch…"></textarea>
+        </label>
+
+        <div class="form__actions">
+          <button type="button" class="btn btn--ghost" id="cancelEditBtn" hidden="">Cancel edit</button>
+          <button type="submit" class="btn btn--primary" id="submitProductBtn">Add product</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ---------- NOTIFICATIONS ---------- -->
+    <section class="view" id="view-notifications" data-view-panel="notifications" hidden="">
+      <div class="view__header">
+        <h1>Notifications</h1>
+        <p class="view__sub">Reminders for what's coming up.</p>
+      </div>
+
+      <div class="notif-permission" id="notifPermissionCard">
+        <div>
+          <strong>Turn on browser reminders</strong>
+          <p>Get a system notification 1 month and 1 week before something expires.</p>
+        </div>
+        <button class="btn btn--primary" id="enableNotifBtn">Enable</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <h2>Expiring in 1 week or less</h2>
+          <span class="panel__count" id="notifWeekCount">0</span>
+        </div>
+        <div class="product-list" id="notifWeekList"></div>
+        <p class="empty-note" id="notifWeekEmpty" hidden="">Nothing due this week.</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel__head">
+          <h2>Expiring within 1 month</h2>
+          <span class="panel__count" id="notifMonthCount">0</span>
+        </div>
+        <div class="product-list" id="notifMonthList"></div>
+        <p class="empty-note" id="notifMonthEmpty" hidden="">Nothing due this month.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom nav (mobile) -->
+  <nav class="bottomnav" aria-label="Primary">
+    <button class="bottomnav__item is-active" data-view="home">
+      <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3Z"></path></svg>
+      <span>Home</span>
+    </button>
+    <button class="bottomnav__item" data-view="products">
+      <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M4 4h16l-1.5 9.5a2 2 0 0 1-2 1.5H7.5a2 2 0 0 1-2-1.5L4 4Zm0 0-.5-2H2M9 20a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+      <span>Products</span>
+    </button>
+    <button class="bottomnav__item bottomnav__item--add" data-view="add">
+      <svg viewBox="0 0 24 24" width="26" height="26"><circle cx="12" cy="12" r="11" fill="currentColor"></circle><path d="M12 7v10M7 12h10" stroke="#fff" stroke-width="2" stroke-linecap="round"></path></svg>
+      <span>Add</span>
+    </button>
+    <button class="bottomnav__item" data-view="notifications">
+      <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 22a2.2 2.2 0 0 0 2.2-2.2h-4.4A2.2 2.2 0 0 0 12 22Zm7-6v-5a7 7 0 0 0-5.5-6.8V3a1.5 1.5 0 0 0-3 0v1.2A7 7 0 0 0 5 11v5l-2 2v1h18v-1Z"></path></svg>
+      <span>Alerts</span>
+      <span class="badge-dot" id="bottomnavNotifDot" hidden=""></span>
+    </button>
+  </nav>
+</div>
+
+<!-- ===== Barcode scan modal ===== -->
+<div class="modal" id="scanModal" hidden="">
+  <div class="modal__card">
+    <div class="modal__head">
+      <h3>Scan a barcode</h3>
+      <button class="modal__close" id="closeScanModal" aria-label="Close">✕</button>
+    </div>
+    <div class="scan-video-wrap">
+      <video id="scanVideo" playsinline="" muted=""></video>
+      <div class="scan-reticle" aria-hidden="true"></div>
+    </div>
+    <p class="scan-status" id="scanStatus">Point your camera at a barcode.</p>
+  </div>
+</div>
+
+<!-- ===== Toast ===== -->
+<div class="toast" id="toast" role="status" aria-live="polite" hidden=""></div>
+
+
+</body>
+</html>
